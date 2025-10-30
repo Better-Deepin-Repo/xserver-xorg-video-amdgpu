@@ -1,3 +1,16 @@
+xserver-xorg-video-amdgpu (25.0.0-1) UNRELEASED; urgency=medium
+
+  * New upstream version.
+  * d/control: Add meson to b-d
+  * d/copyright: Update to current codebase
+  * debian/upstream: Merge signing keys
+  * debian/watch: Update to v5
+  * Update to standards version 4.7.2
+  * Update source package format to version 3
+  * d/control: Use pkgconf instead of pkg-config
+
+ -- Mario Limonciello <superm1@debian.org>  Thu, 30 Oct 2025 09:46:26 -0500
+
 xserver-xorg-video-amdgpu (23.0.0-1) unstable; urgency=medium
 
   * New upstream release. (Closes: #1031021)
