@@ -3,7 +3,7 @@ Upstream-Name: xserver-xorg-video-amdgpu
 Source: http://xorg.freedesktop.org/releases/individual/driver/
 
 Files: *
-Copyright: 2012-2014 Advanced Micro Devices, Inc
+Copyright: 2012-2019 Advanced Micro Devices, Inc
 License: MIT
 
 Files: src/amdgpu_dri2.c
@@ -52,11 +52,23 @@ Copyright: 2013-2014 Intel Corporation
 	   2015 Advanced Micro Devices, Inc
 License: MIT
 
+Files: src/amdgpu_bo_helper.c src/amdgpu_bo_helper.h
+Copyright: 2012 Advanced Micro Devices, Inc
+License: MIT
+
 Files: src/amdgpu_misc.c src/amdgpu_version.h
 Copyright: 2000-2004 Marc Aurele La France
 License: MIT
 
-Files: src/compat-api.h src/drmmode_display.h src/pcidb/parse_pci_ids.pl
+Files: src/amdgpu_pixmap.c src/amdgpu_pixmap.h
+Copyright: 2014 Advanced Micro Devices, Inc
+License: MIT
+
+Files: src/amdgpu_video.c src/amdgpu_video.h
+Copyright: 2012-2014 Advanced Micro Devices, Inc
+License: MIT
+
+Files: src/compat-api.h src/drmmode_display.c src/drmmode_display.h
 Copyright: 2007-2012 Red Hat, Inc
 License: MIT
 
@@ -66,7 +78,8 @@ Copyright: 1999-2001 Brian Paul
 License: MIT
 
 Files: debian/*
-Copyright: 2015 Timo Aaltonen <tjaalton@debian.org>
+Copyright: 2015-2025 Timo Aaltonen <tjaalton@debian.org>
+           2025 Mario Limonciello <superm1@debian.org>
 License: MIT
 
 License: MIT
