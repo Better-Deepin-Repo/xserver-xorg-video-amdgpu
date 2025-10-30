@@ -11,7 +11,7 @@ Build-Depends:
  libgl-dev,
  libgbm-dev,
  libudev-dev [linux-any],
- pkg-config,
+ pkgconf,
  x11proto-dev,
  xserver-xorg-dev (>= 2:1.16),
  xutils-dev (>= 1:7.5+4)
