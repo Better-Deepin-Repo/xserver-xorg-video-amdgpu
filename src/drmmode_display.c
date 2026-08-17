@@ -1353,7 +1353,11 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 						    &fb, &x, &y);
 		}
 
-		if (!fb)
+		/* pScreen->root may be NULL while the screen is being torn down
+		 * (e.g. on resume after a dock/DP hotplug removed the display);
+		 * fall back to front_buffer rather than dereference a NULL window.
+		 */
+		if (!fb && pScreen->root)
 			fb = amdgpu_pixmap_get_fb(pScreen->GetWindowPixmap(pScreen->root));
 		if (!fb) {
 			union gbm_bo_handle bo_handle;
