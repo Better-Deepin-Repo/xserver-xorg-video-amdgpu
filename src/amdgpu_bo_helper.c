@@ -425,12 +425,16 @@ Bool amdgpu_set_shared_pixmap_backing(PixmapPtr ppix, void *fd_handle)
 
 		data.format = amdgpu_get_gbm_format(ppix->drawable.depth,
 						    ppix->drawable.bitsPerPixel);
-		if (data.format == ~0U)
+		if (data.format == ~0U) {
+			close(ihandle);
 			return FALSE;
+		}
 
 		bo = calloc(1, sizeof(struct amdgpu_buffer));
-		if (!bo)
+		if (!bo) {
+			close(ihandle);
 			return FALSE;
+		}
 		bo->ref_count = 1;
 
 		data.fd = ihandle;
@@ -443,6 +447,7 @@ Bool amdgpu_set_shared_pixmap_backing(PixmapPtr ppix, void *fd_handle)
 
 		bo->bo.gbm = gbm_bo_import(info->gbm, GBM_BO_IMPORT_FD, &data,
 					   bo_use);
+		close(ihandle);
 		if (!bo->bo.gbm) {
 			free(bo);
 			return FALSE;
@@ -465,11 +470,10 @@ Bool amdgpu_set_shared_pixmap_backing(PixmapPtr ppix, void *fd_handle)
 	}
 
 	pixmap_buffer = amdgpu_gem_bo_open_prime(pAMDGPUEnt->pDev, ihandle, size);
+	close(ihandle);
 	if (!pixmap_buffer) {
 		return FALSE;
 	}
-
-	close(ihandle);
 
 	ret = amdgpu_set_pixmap_bo(ppix, pixmap_buffer);
 

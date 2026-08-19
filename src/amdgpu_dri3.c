@@ -200,8 +200,14 @@ static PixmapPtr amdgpu_dri3_pixmap_from_fd(ScreenPtr screen,
 					NULL))
 		goto free_pixmap;
 
-	if (screen->SetSharedPixmapBacking(pixmap, (void*)(intptr_t)fd))
-		return pixmap;
+	{
+		int dup_fd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+		if (dup_fd < 0)
+			goto free_pixmap;
+
+		if (screen->SetSharedPixmapBacking(pixmap, (void*)(intptr_t)dup_fd))
+			return pixmap;
+	}
 
 free_pixmap:
 	fbDestroyPixmap(pixmap);
