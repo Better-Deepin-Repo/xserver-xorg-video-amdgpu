@@ -3489,6 +3489,16 @@ void drmmode_fini(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 	}
 }
 
+static struct amdgpu_device_priv *
+get_amdgpu_device_priv(DeviceIntPtr pDev, ScreenPtr pScreen)
+{
+	if (!IsFloating(pDev))
+	        pDev = GetMaster(pDev, MASTER_POINTER);
+
+	return dixLookupScreenPrivate(&pDev->devPrivates,
+				      &amdgpu_device_private_key, pScreen);
+}
+
 static void drmmode_sprite_do_set_cursor(struct amdgpu_device_priv *device_priv,
 					 ScrnInfoPtr scrn, int x, int y)
 {
@@ -3517,8 +3527,7 @@ static void drmmode_sprite_set_cursor(DeviceIntPtr pDev, ScreenPtr pScreen,
 	ScrnInfoPtr scrn = xf86ScreenToScrn(pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	struct amdgpu_device_priv *device_priv =
-		dixLookupScreenPrivate(&pDev->devPrivates,
-				       &amdgpu_device_private_key, pScreen);
+		get_amdgpu_device_priv(pDev, pScreen);
 
 	device_priv->cursor = pCursor;
 	drmmode_sprite_do_set_cursor(device_priv, scrn, x, y);
@@ -3532,8 +3541,7 @@ static void drmmode_sprite_move_cursor(DeviceIntPtr pDev, ScreenPtr pScreen,
 	ScrnInfoPtr scrn = xf86ScreenToScrn(pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	struct amdgpu_device_priv *device_priv =
-		dixLookupScreenPrivate(&pDev->devPrivates,
-				       &amdgpu_device_private_key, pScreen);
+		get_amdgpu_device_priv(pDev, pScreen);
 
 	drmmode_sprite_do_set_cursor(device_priv, scrn, x, y);
 
