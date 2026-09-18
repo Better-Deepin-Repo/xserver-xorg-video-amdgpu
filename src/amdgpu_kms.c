@@ -1900,6 +1900,30 @@ static Bool AMDGPUSaveScreen_KMS(ScreenPtr pScreen, int mode)
 	return TRUE;
 }
 
+static void amdgpu_teardown_kernel_mem(ScrnInfoPtr pScrn)
+{
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
+	int c, i;
+
+	/* Hide the cursors */
+	xf86_hide_cursors(pScrn);
+
+	/* Unmap the cursor buffers */
+	for (c = 0; c < xf86_config->num_crtc; c++) {
+		drmmode_crtc_private_ptr drmmode_crtc =
+			xf86_config->crtc[c]->driver_private;
+
+		if (!drmmode_crtc)
+			continue;
+
+		for (i = 0; i < 2; i++) {
+			if (drmmode_crtc->cursor_buffer[i])
+				amdgpu_bo_unref(
+					&drmmode_crtc->cursor_buffer[i]);
+		}
+	}
+}
+
 /* Called at the end of each server generation.  Restore the original
  * text mode, unmap video memory, and unwrap and call the saved
  * CloseScreen function.
@@ -1926,6 +1950,7 @@ static Bool AMDGPUCloseScreen_KMS(ScreenPtr pScreen)
 	}
 
 	amdgpu_sync_close(pScreen);
+	amdgpu_teardown_kernel_mem(pScrn);
 	amdgpu_drop_drm_master(pScrn);
 
 	drmmode_fini(pScrn, &info->drmmode);
@@ -2423,6 +2448,7 @@ static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 
 				if (!(drmmode_crtc->cursor_buffer[i])) {
 					ErrorF("Failed to allocate cursor buffer memory\n");
+					amdgpu_teardown_kernel_mem(pScrn);
 					return FALSE;
 				}
 

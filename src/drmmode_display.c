@@ -59,6 +59,7 @@
 #include <gbm.h>
 
 #define DEFAULT_NOMINAL_FRAME_RATE 60
+static Bool use_set_cursor2 = 0x1;
 
 static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height);
 
@@ -1639,8 +1640,13 @@ static void drmmode_hide_cursor(xf86CrtcPtr crtc)
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 
-	drmModeSetCursor(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id, 0,
-			 info->cursor_w, info->cursor_h);
+	if (use_set_cursor2)
+		drmModeSetCursor2(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
+			0, info->cursor_w, info->cursor_h,
+			drmmode_crtc->cursor_xhot, drmmode_crtc->cursor_yhot);
+	else
+		drmModeSetCursor(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
+			0, info->cursor_w, info->cursor_h);
 	drmmode_crtc->cursor = NULL;
 }
 
@@ -1656,7 +1662,6 @@ static void drmmode_show_cursor(xf86CrtcPtr crtc)
 	CursorPtr cursor = xf86_config->cursor;
 	int xhot = cursor->bits->xhot;
 	int yhot = cursor->bits->yhot;
-	static Bool use_set_cursor2 = TRUE;
 	struct drm_mode_cursor2 arg;
 
 	drmmode_crtc->cursor = xf86_config->cursor;
