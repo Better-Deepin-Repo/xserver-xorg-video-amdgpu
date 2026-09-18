@@ -1909,6 +1909,7 @@ static Bool AMDGPUCloseScreen_KMS(ScreenPtr pScreen)
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
+	Bool ret = false;
 
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 		       "AMDGPUCloseScreen\n");
@@ -1945,7 +1946,14 @@ static Bool AMDGPUCloseScreen_KMS(ScreenPtr pScreen)
 
 	pScreen->BlockHandler = info->BlockHandler;
 	pScreen->CloseScreen = info->CloseScreen;
-	return pScreen->CloseScreen(pScreen);
+	ret = pScreen->CloseScreen(pScreen);
+
+	if (info->gbm) {
+		gbm_device_destroy(info->gbm);
+		info->gbm = NULL;
+	}
+
+	return ret;
 }
 
 void AMDGPUFreeScreen_KMS(ScrnInfoPtr pScrn)
