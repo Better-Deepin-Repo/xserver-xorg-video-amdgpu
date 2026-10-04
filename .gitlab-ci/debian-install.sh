@@ -3,7 +3,7 @@
 set -e
 set -o xtrace
 
-echo 'deb-src https://deb.debian.org/debian bookworm main' >/etc/apt/sources.list.d/deb-src.list
+echo 'deb-src https://deb.debian.org/debian trixie main' >/etc/apt/sources.list.d/deb-src.list
 echo "deb [trusted=yes] https://gitlab.freedesktop.org/gfx-ci/ci-deb-repo/-/raw/${PKG_REPO_REV}/ ${FDO_DISTRIBUTION_VERSION%-*} main" | tee /etc/apt/sources.list.d/gfx-ci_.list
 
 apt-get update
@@ -42,6 +42,17 @@ for VERSION in 1.16 1.17 1.18 1.19 1.20 21.1; do
     make -C include install-nodist_sdkHEADERS
     make install-headers install-aclocalDATA install-pkgconfigDATA clean
     git restore configure.ac
+done
+
+for VERSION in 26.1; do
+    git checkout server-${VERSION}-branch
+    mkdir _build
+    cd _build
+    meson setup .. -Dprefix=/usr/local/xserver-$VERSION \
+        -Ddri2=true -Ddri3=true -Dglamor=true -Dlibdir=lib
+    meson install
+    cd ..
+    rm -rf _build
 done
 
 apt-get install -y clang xutils-dev libdrm-dev libgl1-mesa-dev libgbm-dev libudev-dev \
