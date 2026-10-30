@@ -1,3 +1,10 @@
+xserver-xorg-video-amdgpu (25.0.0+git20261030-1) unstable; urgency=medium
+
+  * New upstream snapshot from master (6f55663, upstream commit date
+    2026-10-04).
+
+ -- LFRon <ronforever@outlook.com>  Fri, 30 Oct 2026 18:31:17 +0800
+
 xserver-xorg-video-amdgpu (25.0.0-1) unstable; urgency=medium
 
   [ Mario Limonciello ]
