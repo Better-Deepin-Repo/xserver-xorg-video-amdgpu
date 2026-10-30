@@ -40,6 +40,7 @@
 #include <gbm.h>
 #include <errno.h>
 #include <libgen.h>
+#include <drm_fourcc.h>
 
 static int open_card_node(ScreenPtr screen, int *out)
 {
@@ -200,8 +201,14 @@ static PixmapPtr amdgpu_dri3_pixmap_from_fd(ScreenPtr screen,
 					NULL))
 		goto free_pixmap;
 
-	if (screen->SetSharedPixmapBacking(pixmap, (void*)(intptr_t)fd))
-		return pixmap;
+	{
+		int dup_fd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+		if (dup_fd < 0)
+			goto free_pixmap;
+
+		if (screen->SetSharedPixmapBacking(pixmap, (void*)(intptr_t)dup_fd))
+			return pixmap;
+	}
 
 free_pixmap:
 	fbDestroyPixmap(pixmap);
@@ -253,8 +260,139 @@ static int amdgpu_dri3_fd_from_pixmap(ScreenPtr screen,
 	return fd;
 }
 
+#if DRI3_SCREEN_INFO_VERSION >= 2
+
+static PixmapPtr amdgpu_dri3_pixmap_from_fds(ScreenPtr screen,
+					     CARD8 num_fds,
+					     const int *fds,
+					     CARD16 width,
+					     CARD16 height,
+					     const CARD32 *strides,
+					     const CARD32 *offsets,
+					     CARD8 depth,
+					     CARD8 bpp,
+					     CARD64 modifier)
+{
+	/* Single plane with implicit layout: same as DRI3 1.0 */
+	if (num_fds == 1 && offsets[0] == 0 && strides[0] <= UINT16_MAX &&
+	    modifier == DRM_FORMAT_MOD_INVALID)
+		return amdgpu_dri3_pixmap_from_fd(screen, fds[0], width, height,
+						  strides[0], depth, bpp);
+
+#ifdef USE_GLAMOR
+	/* Multi-plane and/or explicit modifier need glamor */
+	if (AMDGPUPTR(xf86ScreenToScrn(screen))->use_glamor) {
+		PixmapPtr pixmap = glamor_pixmap_from_fds(screen, num_fds, fds,
+							  width, height,
+							  strides, offsets,
+							  depth, bpp, modifier);
+
+		if (pixmap) {
+			struct amdgpu_pixmap *priv = calloc(1, sizeof(*priv));
+
+			if (priv) {
+				amdgpu_set_pixmap_private(pixmap, priv);
+				pixmap->usage_hint |= AMDGPU_CREATE_PIXMAP_DRI2;
+				return pixmap;
+			}
+
+			screen->DestroyPixmap(pixmap);
+		}
+	}
+#endif
+
+	return NULL;
+}
+
+static int amdgpu_dri3_fds_from_pixmap(ScreenPtr screen,
+				       PixmapPtr pixmap,
+				       int *fds,
+				       uint32_t *strides,
+				       uint32_t *offsets,
+				       uint64_t *modifier)
+{
+	struct amdgpu_buffer *bo;
+	uint32_t fd;
+#ifdef USE_GLAMOR
+	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+
+	if (AMDGPUPTR(scrn)->use_glamor) {
+		int ret = glamor_fds_from_pixmap(screen, pixmap, fds, strides,
+						 offsets, modifier);
+
+		/* As in amdgpu_dri3_fd_from_pixmap */
+		if (ret > 0)
+			amdgpu_glamor_flush(scrn);
+
+		return ret;
+	}
+#endif
+
+	bo = amdgpu_get_pixmap_bo(pixmap);
+	if (!bo)
+		return 0;
+
+	if (amdgpu_bo_export(bo->bo.amdgpu, amdgpu_bo_handle_type_dma_buf_fd,
+			     &fd) != 0)
+		return 0;
+
+	fds[0] = fd;
+	strides[0] = pixmap->devKind;
+	offsets[0] = 0;
+	*modifier = DRM_FORMAT_MOD_INVALID;
+	return 1;
+}
+
+static int amdgpu_dri3_get_formats(ScreenPtr screen,
+				   CARD32 *num_formats, CARD32 **formats)
+{
+#ifdef USE_GLAMOR
+	if (AMDGPUPTR(xf86ScreenToScrn(screen))->use_glamor)
+		return glamor_get_formats(screen, num_formats, formats);
+#endif
+	*num_formats = 0;
+	return FALSE;
+}
+
+static int amdgpu_dri3_get_modifiers(ScreenPtr screen, uint32_t format,
+				     uint32_t *num_modifiers,
+				     uint64_t **modifiers)
+{
+#ifdef USE_GLAMOR
+	if (AMDGPUPTR(xf86ScreenToScrn(screen))->use_glamor)
+		return glamor_get_modifiers(screen, format, num_modifiers,
+					    modifiers);
+#endif
+	*num_modifiers = 0;
+	return FALSE;
+}
+
+static int amdgpu_dri3_get_drawable_modifiers(DrawablePtr draw,
+					      uint32_t format,
+					      uint32_t *num_modifiers,
+					      uint64_t **modifiers)
+{
+#ifdef USE_GLAMOR
+	if (AMDGPUPTR(xf86ScreenToScrn(draw->pScreen))->use_glamor)
+		return glamor_get_drawable_modifiers(draw, format,
+						     num_modifiers, modifiers);
+#endif
+	*num_modifiers = 0;
+	return FALSE;
+}
+
+#endif /* DRI3_SCREEN_INFO_VERSION >= 2 */
+
 static dri3_screen_info_rec amdgpu_dri3_screen_info = {
-#if DRI3_SCREEN_INFO_VERSION >= 1 && XORG_VERSION_CURRENT <= XORG_VERSION_NUMERIC(1,18,99,1,0)
+#if DRI3_SCREEN_INFO_VERSION >= 2
+	.version = 2,
+	.open = amdgpu_dri3_open,
+	.pixmap_from_fds = amdgpu_dri3_pixmap_from_fds,
+	.fds_from_pixmap = amdgpu_dri3_fds_from_pixmap,
+	.get_formats = amdgpu_dri3_get_formats,
+	.get_modifiers = amdgpu_dri3_get_modifiers,
+	.get_drawable_modifiers = amdgpu_dri3_get_drawable_modifiers,
+#elif DRI3_SCREEN_INFO_VERSION >= 1 && XORG_VERSION_CURRENT <= XORG_VERSION_NUMERIC(1,18,99,1,0)
 	.version = 1,
 	.open_client = amdgpu_dri3_open_client,
 #else

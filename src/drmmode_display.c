@@ -59,6 +59,7 @@
 #include <gbm.h>
 
 #define DEFAULT_NOMINAL_FRAME_RATE 60
+static Bool use_set_cursor2 = 0x1;
 
 static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height);
 
@@ -510,7 +511,7 @@ drmmode_crtc_scanout_create(xf86CrtcPtr crtc, PixmapPtr *scanout,
 
 	if (!amdgpu_pixmap_get_fb(*scanout)) {
 		ErrorF("failed to create CRTC scanout FB\n");
-error:		
+error:
 		drmmode_crtc_scanout_destroy(scanout);
 		return FALSE;
 	}
@@ -677,7 +678,7 @@ drmmode_crtc_prime_scanout_update(xf86CrtcPtr crtc, DisplayModePtr mode,
 	*x = *y = 0;
 	drmmode_crtc->scanout_id = scanout_id;
 }
-	
+
 
 static void
 drmmode_crtc_scanout_update(xf86CrtcPtr crtc, DisplayModePtr mode,
@@ -1353,7 +1354,11 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 						    &fb, &x, &y);
 		}
 
-		if (!fb)
+		/* pScreen->root may be NULL while the screen is being torn down
+		 * (e.g. on resume after a dock/DP hotplug removed the display);
+		 * fall back to front_buffer rather than dereference a NULL window.
+		 */
+		if (!fb && pScreen->root)
 			fb = amdgpu_pixmap_get_fb(pScreen->GetWindowPixmap(pScreen->root));
 		if (!fb) {
 			union gbm_bo_handle bo_handle;
@@ -1635,8 +1640,13 @@ static void drmmode_hide_cursor(xf86CrtcPtr crtc)
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 
-	drmModeSetCursor(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id, 0,
-			 info->cursor_w, info->cursor_h);
+	if (use_set_cursor2)
+		drmModeSetCursor2(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
+			0, info->cursor_w, info->cursor_h,
+			drmmode_crtc->cursor_xhot, drmmode_crtc->cursor_yhot);
+	else
+		drmModeSetCursor(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
+			0, info->cursor_w, info->cursor_h);
 	drmmode_crtc->cursor = NULL;
 }
 
@@ -1652,7 +1662,6 @@ static void drmmode_show_cursor(xf86CrtcPtr crtc)
 	CursorPtr cursor = xf86_config->cursor;
 	int xhot = cursor->bits->xhot;
 	int yhot = cursor->bits->yhot;
-	static Bool use_set_cursor2 = TRUE;
 	struct drm_mode_cursor2 arg;
 
 	drmmode_crtc->cursor = xf86_config->cursor;
@@ -3485,6 +3494,16 @@ void drmmode_fini(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 	}
 }
 
+static struct amdgpu_device_priv *
+get_amdgpu_device_priv(DeviceIntPtr pDev, ScreenPtr pScreen)
+{
+	if (!IsFloating(pDev))
+	        pDev = GetMaster(pDev, MASTER_POINTER);
+
+	return dixLookupScreenPrivate(&pDev->devPrivates,
+				      &amdgpu_device_private_key, pScreen);
+}
+
 static void drmmode_sprite_do_set_cursor(struct amdgpu_device_priv *device_priv,
 					 ScrnInfoPtr scrn, int x, int y)
 {
@@ -3513,8 +3532,7 @@ static void drmmode_sprite_set_cursor(DeviceIntPtr pDev, ScreenPtr pScreen,
 	ScrnInfoPtr scrn = xf86ScreenToScrn(pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	struct amdgpu_device_priv *device_priv =
-		dixLookupScreenPrivate(&pDev->devPrivates,
-				       &amdgpu_device_private_key, pScreen);
+		get_amdgpu_device_priv(pDev, pScreen);
 
 	device_priv->cursor = pCursor;
 	drmmode_sprite_do_set_cursor(device_priv, scrn, x, y);
@@ -3528,8 +3546,7 @@ static void drmmode_sprite_move_cursor(DeviceIntPtr pDev, ScreenPtr pScreen,
 	ScrnInfoPtr scrn = xf86ScreenToScrn(pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	struct amdgpu_device_priv *device_priv =
-		dixLookupScreenPrivate(&pDev->devPrivates,
-				       &amdgpu_device_private_key, pScreen);
+		get_amdgpu_device_priv(pDev, pScreen);
 
 	drmmode_sprite_do_set_cursor(device_priv, scrn, x, y);
 
@@ -3583,7 +3600,7 @@ miPointerSpriteFuncRec drmmode_sprite_funcs = {
 	.DeviceCursorCleanup = drmmode_sprite_device_cursor_cleanup,
 };
 
-	
+
 void drmmode_adjust_frame(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int x, int y)
 {
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);

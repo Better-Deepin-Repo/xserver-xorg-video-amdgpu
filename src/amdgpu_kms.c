@@ -350,7 +350,7 @@ amdgpu_event_callback(CallbackListPtr *list,
 	 */
 	client_priv->needs_flush = info->gpu_flushed;
 	server_priv->needs_flush = info->gpu_flushed;
-	
+
 	for (i = 0; i < eventinfo->count; i++) {
 		if (eventinfo->events[i].u.u.type == info->callback_event_type) {
 			client_priv->needs_flush++;
@@ -887,7 +887,7 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 			   "Failed to get FB for PRIME flip.\n");
 		return;
 	}
-	
+
 	drm_queue_seq = amdgpu_drm_queue_alloc(crtc,
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT, fb,
@@ -1900,6 +1900,30 @@ static Bool AMDGPUSaveScreen_KMS(ScreenPtr pScreen, int mode)
 	return TRUE;
 }
 
+static void amdgpu_teardown_kernel_mem(ScrnInfoPtr pScrn)
+{
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
+	int c, i;
+
+	/* Hide the cursors */
+	xf86_hide_cursors(pScrn);
+
+	/* Unmap the cursor buffers */
+	for (c = 0; c < xf86_config->num_crtc; c++) {
+		drmmode_crtc_private_ptr drmmode_crtc =
+			xf86_config->crtc[c]->driver_private;
+
+		if (!drmmode_crtc)
+			continue;
+
+		for (i = 0; i < 2; i++) {
+			if (drmmode_crtc->cursor_buffer[i])
+				amdgpu_bo_unref(
+					&drmmode_crtc->cursor_buffer[i]);
+		}
+	}
+}
+
 /* Called at the end of each server generation.  Restore the original
  * text mode, unmap video memory, and unwrap and call the saved
  * CloseScreen function.
@@ -1909,6 +1933,7 @@ static Bool AMDGPUCloseScreen_KMS(ScreenPtr pScreen)
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
+	Bool ret = false;
 
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 		       "AMDGPUCloseScreen\n");
@@ -1925,6 +1950,7 @@ static Bool AMDGPUCloseScreen_KMS(ScreenPtr pScreen)
 	}
 
 	amdgpu_sync_close(pScreen);
+	amdgpu_teardown_kernel_mem(pScrn);
 	amdgpu_drop_drm_master(pScrn);
 
 	drmmode_fini(pScrn, &info->drmmode);
@@ -1945,7 +1971,14 @@ static Bool AMDGPUCloseScreen_KMS(ScreenPtr pScreen)
 
 	pScreen->BlockHandler = info->BlockHandler;
 	pScreen->CloseScreen = info->CloseScreen;
-	return pScreen->CloseScreen(pScreen);
+	ret = pScreen->CloseScreen(pScreen);
+
+	if (info->gbm) {
+		gbm_device_destroy(info->gbm);
+		info->gbm = NULL;
+	}
+
+	return ret;
 }
 
 void AMDGPUFreeScreen_KMS(ScrnInfoPtr pScrn)
@@ -2415,6 +2448,7 @@ static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 
 				if (!(drmmode_crtc->cursor_buffer[i])) {
 					ErrorF("Failed to allocate cursor buffer memory\n");
+					amdgpu_teardown_kernel_mem(pScrn);
 					return FALSE;
 				}
 

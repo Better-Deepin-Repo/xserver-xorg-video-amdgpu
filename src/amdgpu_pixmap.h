@@ -148,7 +148,7 @@ amdgpu_pixmap_get_fb(PixmapPtr pix)
 
 	if (fb_ptr && *fb_ptr)
 		return *fb_ptr;
-	
+
 	if (amdgpu_pixmap_get_handle(pix, &handle)) {
 		ScrnInfoPtr scrn = xf86ScreenToScrn(pix->drawable.pScreen);
 		AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
